@@ -18,8 +18,8 @@ app/                 Nuxt srcDir — the client
 server/
 ├─ api/              transport only: auth, parse the body, call the domain, return
 ├─ domain/           the rules, one directory per slice, entered through index.ts
-│                    (domain/user is the worked example: register, credentials,
-│                    atproto account linking, the sign-in ticket handoff)
+│                    (domain/user is the worked example: atproto account
+│                    linking, the sign-in ticket handoff, account deletion)
 ├─ plugins/          boot-time checks (config assertions)
 ├─ routes/           routes outside the /api convention (client-metadata.json)
 └─ utils/            no domain rules — infra (prisma client, rate limiting, atproto client)

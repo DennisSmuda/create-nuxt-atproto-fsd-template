@@ -21,10 +21,8 @@ export async function signInAs(context: BrowserContext, user: SeedUser): Promise
       sub: user.id,
       id: user.id,
       name: user.name,
-      email: user.email,
       picture: null,
-      hasPassword: false,
-      atprotoHandle: null,
+      atprotoHandle: user.atprotoHandle,
       atprotoAvatarUrl: null,
     },
   })

@@ -10,13 +10,11 @@ import prisma from '../../utils/prisma'
 
 const toPublicUser = (user: {
   id: string
-  email: string | null
   name: string | null
   atprotoHandle: string | null
   atprotoAvatarUrl: string | null
 }): PublicUser => ({
   id: user.id,
-  email: user.email,
   name: user.name,
   atprotoHandle: user.atprotoHandle,
   atprotoAvatarUrl: user.atprotoAvatarUrl,
@@ -47,11 +45,7 @@ export async function refreshAtprotoProfile(
   })
 }
 
-/**
- * Opens an account for a proven DID — like `registerUser` but with no
- * password and an identity proven by OAuth, not typed into the browser.
- * No email is asked for or stored.
- */
+/** Opens an account for a proven DID — the identity is proven by OAuth, not typed into a form. */
 export async function registerAtprotoUser(params: {
   did: string
   handle: string
@@ -77,9 +71,7 @@ export async function registerAtprotoUser(params: {
   const user = await prisma.user
     .create({
       data: {
-        email: null,
         name,
-        password: null,
         atprotoDid: params.did,
         atprotoHandle: params.handle,
         atprotoAvatarUrl: params.avatarUrl,

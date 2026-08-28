@@ -1,7 +1,7 @@
 # {{title}}
 
-Nuxt 4, Prisma on SQLite, `@sidebase/nuxt-auth` with credentials and
-AT Protocol (Bluesky) sign-in.
+Nuxt 4, Prisma on SQLite, `@sidebase/nuxt-auth` with AT Protocol (Bluesky)
+sign-in.
 
 ## Setup
 
@@ -16,21 +16,18 @@ pnpm prisma migrate dev    # creates dev.db and applies migrations
 
 ### Environment
 
-| Variable                    | Required          | What it is                                                                                               |
-| --------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`              | yes               | SQLite file, e.g. `file:./dev.db`. In production, an absolute path _outside_ the repo.                   |
-| `NUXT_AUTH_SECRET`          | yes               | Signs session tokens. `openssl rand -hex 32`.                                                            |
-| `NUXT_AUTH_ORIGIN`          | yes               | Absolute URL of the auth endpoint, e.g. `http://127.0.0.1:3000/api/auth`. Must match the browsed origin. |
-| `APP_ORIGIN`                | yes in production | Origin the AT Protocol OAuth client metadata is built from. Defaults to `http://127.0.0.1:3000`.         |
-| `NUXT_PUBLIC_PASSWORD_AUTH` | no                | `true` re-enables email + password sign-in. On in `nuxt dev`, off in production builds.                  |
-| `SIGNUP_ALLOWLIST`          | no                | Comma-separated handles/emails allowed to sign up. Unset means anyone can.                               |
+| Variable           | Required          | What it is                                                                                               |
+| ------------------ | ----------------- | -------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`     | yes               | SQLite file, e.g. `file:./dev.db`. In production, an absolute path _outside_ the repo.                   |
+| `NUXT_AUTH_SECRET` | yes               | Signs session tokens. `openssl rand -hex 32`.                                                            |
+| `NUXT_AUTH_ORIGIN` | yes               | Absolute URL of the auth endpoint, e.g. `http://127.0.0.1:3000/api/auth`. Must match the browsed origin. |
+| `APP_ORIGIN`       | yes in production | Origin the AT Protocol OAuth client metadata is built from. Defaults to `http://127.0.0.1:3000`.         |
+| `SIGNUP_ALLOWLIST` | no                | Comma-separated Bluesky handles allowed to sign up. Unset means anyone can.                              |
 
 ## Sign in via Atmosphere Protocol
 
 AT Protocol OAuth, server-side, `atproto` scope only — no email, no account
-access. Email/password sign-in exists as a dev-only affordance
-(`server/utils/password-auth.ts`), off in production unless
-`NUXT_PUBLIC_PASSWORD_AUTH=true`.
+access. This is the only sign-in method.
 
 **In dev, browse to `http://127.0.0.1:3000`, not `localhost:3000`** — the
 atproto dev exception needs matching loopback origins, or the session

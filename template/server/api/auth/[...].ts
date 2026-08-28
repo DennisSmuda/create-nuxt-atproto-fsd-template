@@ -1,8 +1,7 @@
 import { NuxtAuthHandler } from '#auth'
 import CredentialsProviderModule from 'next-auth/providers/credentials'
 import prisma from '../../utils/prisma'
-import { redeemTicket, verifyCredentials } from '../../domain/user'
-import { passwordAuthEnabled } from '../../utils/password-auth'
+import { redeemTicket } from '../../domain/user'
 import { rateLimit } from '../../utils/rate-limit'
 
 /**
@@ -17,26 +16,6 @@ const CredentialsProvider =
 
 const handler = NuxtAuthHandler({
   providers: [
-    CredentialsProvider({
-      name: 'Credentials',
-      credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
-      },
-      async authorize(credentials) {
-        // Gated here, not just on the login page — hiding a form isn't disabling a provider.
-        if (!passwordAuthEnabled()) {
-          return null
-        }
-
-        if (!credentials?.email || !credentials?.password) {
-          return null
-        }
-
-        return verifyCredentials(credentials.email, credentials.password)
-      },
-    }),
-
     /**
      * Bluesky sign-in, arriving as a ticket, not a secret — next-auth's OAuth
      * machinery can't drive AT Protocol (per-user issuer, PAR, DPoP), so that
@@ -67,7 +46,7 @@ const handler = NuxtAuthHandler({
           return null
         }
 
-        return { id: user.id, email: user.email, name: user.name }
+        return { id: user.id, name: user.name }
       },
     }),
   ],
@@ -83,9 +62,8 @@ const handler = NuxtAuthHandler({
         // can change these without a fresh sign-in.
         const row = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { password: true, atprotoHandle: true, atprotoAvatarUrl: true },
+          select: { atprotoHandle: true, atprotoAvatarUrl: true },
         })
-        token.hasPassword = Boolean(row?.password)
         token.atprotoHandle = row?.atprotoHandle ?? null
         token.atprotoAvatarUrl = row?.atprotoAvatarUrl ?? null
       }
@@ -95,9 +73,6 @@ const handler = NuxtAuthHandler({
       // A pre-`id` token carries no id; the session then has none and requireUserId 401s, correctly.
       if (session.user && typeof token.id === 'string') {
         session.user.id = token.id
-        // Defaults to true for a token predating this field — worst case, shows
-        // the change-password form to someone who can't use it.
-        session.user.hasPassword = token.hasPassword ?? true
         session.user.atprotoHandle = token.atprotoHandle ?? null
         session.user.atprotoAvatarUrl = token.atprotoAvatarUrl ?? null
       }

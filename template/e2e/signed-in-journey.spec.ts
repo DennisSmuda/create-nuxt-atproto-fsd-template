@@ -11,6 +11,6 @@ test('a seeded user lands signed in without going through login', async ({
   await page.goto('/')
 
   await expect(
-    page.getByRole('heading', { name: `Signed in as ${SEED_USERS[0].email}` }),
+    page.getByRole('heading', { name: `Signed in as @${SEED_USERS[0].atprotoHandle}` }),
   ).toBeVisible()
 })

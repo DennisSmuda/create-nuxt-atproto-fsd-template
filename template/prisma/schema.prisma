@@ -10,17 +10,9 @@ datasource db {
 model User {
   id              String    @id @default(cuid())
   name            String?
-  // Nullable since Bluesky sign-in: an AT Protocol identity has no email to
-  // give. Still unique where present: it is what the credentials provider
-  // matches on.
-  email           String?   @unique
-  // Nullable since Bluesky sign-in: an account opened through AT Protocol OAuth
-  // never had a password to store. `verifyCredentials` refuses such a row
-  // outright rather than comparing against an absent hash.
-  password        String?
-  // The AT Protocol identity this account signs in with, when it has one. The
-  // DID is the stable identifier and the only thing sign-in matches on; the
-  // handle is a display label that its owner can change at any time.
+  // The AT Protocol identity this account signs in with. The DID is the
+  // stable identifier and the only thing sign-in matches on; the handle is a
+  // display label that its owner can change at any time.
   atprotoDid      String?   @unique
   atprotoHandle   String?
   // The Bluesky profile picture, as a CDN URL. Cached rather than fetched on

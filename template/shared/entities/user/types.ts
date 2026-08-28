@@ -2,9 +2,7 @@
 export interface PublicUser {
   id: string
   name: string | null
-  /** Null for an AT Protocol account or a closed one. */
-  email: string | null
-  /** Readable label for an AT Protocol account; the DID stays server-side. */
+  /** Readable label for the account; the DID stays server-side. */
   atprotoHandle: string | null
   atprotoAvatarUrl: string | null
 }
@@ -12,7 +10,6 @@ export interface PublicUser {
 export const publicUserSelect = {
   id: true,
   name: true,
-  email: true,
   atprotoHandle: true,
   atprotoAvatarUrl: true,
 } as const

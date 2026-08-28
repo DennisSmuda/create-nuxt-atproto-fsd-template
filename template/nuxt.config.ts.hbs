@@ -31,13 +31,6 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     authSecret: process.env.NUXT_AUTH_SECRET,
-    public: {
-      // Email + password sign-in is a development affordance, so it is on in
-      // `nuxt dev` and off in a production build unless a deployment sets
-      // `NUXT_PUBLIC_PASSWORD_AUTH=true`. Public so the login page and the
-      // provider that guards it read one value and cannot disagree.
-      passwordAuth: process.env.NODE_ENV !== 'production',
-    },
   },
   icon: {
     serverBundle: {

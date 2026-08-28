@@ -1,14 +1,9 @@
 /** How a user is written on screen. */
 
-type Labelled =
-  | { name?: string | null; email?: string | null; atprotoHandle?: string | null }
-  | null
-  | undefined
+type Labelled = { name?: string | null; atprotoHandle?: string | null } | null | undefined
 
-/** The email or `@handle` an account is known by, whichever it has, or an empty string. */
+/** The `@handle` an account is known by, or an empty string. */
 export function accountLabel(user: Labelled): string {
-  if (user?.email) return user.email
-
   return user?.atprotoHandle ? `@${user.atprotoHandle}` : ''
 }
 

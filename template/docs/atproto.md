@@ -43,10 +43,9 @@ than on a timer, since they only grow when a sign-in starts.
 
 ## First-time signup
 
-A Bluesky identity has no email, so a first-time user is asked for one once
-at `/atmosphere/register`, as a contact address only (`server/utils/signup-allowlist.ts`
-can restrict this to identities you already know). `User.password` stays
-null — password sign-in refuses such rows.
+A first-time user is asked for a display name once at `/atmosphere/register`
+(`server/utils/signup-allowlist.ts` can restrict signup to handles you
+already know).
 
 Avatar comes from Bluesky's public AppView (no auth needed), cached on the
 user row and refreshed each sign-in.

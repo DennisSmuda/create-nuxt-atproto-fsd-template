@@ -4,8 +4,7 @@ import { NAME_MAX_LENGTH } from '#shared/entities/user'
 
 /**
  * Opening an account from a DID rather than a password. The DID is the
- * identity, and the only thing this account is ever matched on — no email
- * is stored or taken from the signup form.
+ * identity, and the only thing this account is ever matched on.
  */
 
 const { prisma } = vi.hoisted(() => ({
@@ -58,7 +57,6 @@ describe('findUserByDid', () => {
     givenUsers({
       byDid: {
         id: 'u1',
-        email: null,
         name: 'Alice',
         atprotoHandle: HANDLE,
         atprotoAvatarUrl: AVATAR,
@@ -68,7 +66,6 @@ describe('findUserByDid', () => {
 
     await expect(findUserByDid(DID)).resolves.toEqual({
       id: 'u1',
-      email: null,
       name: 'Alice',
       atprotoHandle: HANDLE,
       atprotoAvatarUrl: AVATAR,
@@ -77,7 +74,7 @@ describe('findUserByDid', () => {
 
   it('does not resurrect a closed account', async () => {
     givenUsers({
-      byDid: { id: 'u1', email: null, name: null, deletedAt: new Date() },
+      byDid: { id: 'u1', name: null, deletedAt: new Date() },
     })
 
     await expect(findUserByDid(DID)).resolves.toBeNull()
@@ -89,7 +86,7 @@ describe('findUserByDid', () => {
 })
 
 describe('registerAtprotoUser', () => {
-  it('creates an account with no password, no email, and the proven DID', async () => {
+  it('creates an account with the proven DID', async () => {
     await registerAtprotoUser({
       did: DID,
       handle: HANDLE,
@@ -100,27 +97,11 @@ describe('registerAtprotoUser', () => {
     const { data } = prisma.user.create.mock.calls[0]![0]
 
     expect(data).toMatchObject({
-      // Explicit, not left off — an AT Protocol identity has no address to give.
-      email: null,
       name: 'Alice',
-      password: null,
       atprotoDid: DID,
       atprotoHandle: HANDLE,
       atprotoAvatarUrl: AVATAR,
     })
-  })
-
-  it('never looks an address up, because it is not given one', async () => {
-    await registerAtprotoUser({
-      did: DID,
-      handle: HANDLE,
-      avatarUrl: AVATAR,
-      name: 'Alice',
-    })
-
-    for (const [args] of prisma.user.findUnique.mock.calls) {
-      expect(args.where.email).toBeUndefined()
-    }
   })
 
   it('refuses a DID that already has an account', async () => {

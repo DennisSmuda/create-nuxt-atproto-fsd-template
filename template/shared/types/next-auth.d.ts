@@ -8,9 +8,7 @@ declare module 'next-auth' {
   interface Session {
     user?: {
       id: string
-      /** False for a Bluesky account, which never had one. */
-      hasPassword: boolean
-      /** The AT Protocol handle this account signs in with, when it has one. */
+      /** The AT Protocol handle this account signs in with. */
       atprotoHandle: string | null
       /** On the session as well as `PublicUser` so the header avatar needs no fetch. */
       atprotoAvatarUrl: string | null
@@ -22,7 +20,6 @@ declare module 'next-auth/jwt' {
   interface JWT {
     /** All optional: a token minted before a field existed will not have it. */
     id?: string
-    hasPassword?: boolean
     atprotoHandle?: string | null
     atprotoAvatarUrl?: string | null
   }
