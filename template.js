@@ -48,6 +48,11 @@ const template = createTemplate({
 
     let files = await intake(TEMPLATE_DIR, { exclude: /\.hbs$/i })
 
+    // npm never publishes files literally named `.gitignore`, so the template
+    // stores it dotless and it's restored here.
+    const { gitignore, ...rest } = files
+    files = { ...rest, '.gitignore': gitignore }
+
     for (const relativePath of HANDLEBARS_FILES) {
       const rendered = await handlebars(
         path.join(TEMPLATE_DIR, `${relativePath}.hbs`),
