@@ -58,9 +58,3 @@ for the handful of files that carry `{{ }}` placeholders
 deliberately, since Vue SFCs use `{{ }}` for their own interpolation and
 GitHub Actions expressions use `${{ }}`, both of which would collide with
 Handlebars if the whole tree were run through it.
-
-## Updating from teilweise
-
-This is a snapshot, not a live link. When teilweise's auth code or lint/test
-config changes in a way worth carrying forward, re-copy the relevant files
-under `template/` by hand.
