@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  name            String?
+  // Nullable since Bluesky sign-in: an AT Protocol identity has no email to
+  // give. Still unique where present: it is what the credentials provider
+  // matches on.
+  email           String?   @unique
+  // Nullable since Bluesky sign-in: an account opened through AT Protocol OAuth
+  // never had a password to store. `verifyCredentials` refuses such a row
+  // outright rather than comparing against an absent hash.
+  password        String?
+  // The AT Protocol identity this account signs in with, when it has one. The
+  // DID is the stable identifier and the only thing sign-in matches on; the
+  // handle is a display label that its owner can change at any time.
+  atprotoDid      String?   @unique
+  atprotoHandle   String?
+  // The Bluesky profile picture, as a CDN URL. Cached rather than fetched on
+  // render, and refreshed on each sign-in, so it lags a changed picture by one
+  // login. Null both for a non-Bluesky account and for one with no picture set.
+  atprotoAvatarUrl String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+}
+
+// Backing for the two key/value stores `@atproto/oauth-client-node` requires.
+// They hold in-flight OAuth state and, briefly, an issued OAuth session; both
+// are the library's own serialized shapes, opaque to this app, which is why
+// they are stored as JSON text rather than modelled out into columns.
+
+model AtprotoOauthState {
+  key       String   @id
+  state     String
+  createdAt DateTime @default(now())
+}
+
+model AtprotoOauthSession {
+  did       String   @id
+  session   String
+  updatedAt DateTime @updatedAt
+}
+
+// The one-use handoff between a verified OAuth callback and next-auth.
+//
+// The callback runs on the server and cannot mint a session cookie itself, so
+// it records what it proved here and sends the browser to a page that redeems
+// it through the `atproto` credentials provider. Only the SHA-256 of the token
+// is stored: a leaked database row then still cannot be redeemed. `kind` keeps
+// a ticket that only identifies a DID from being spent as if it identified an
+// account.
+model AtprotoAuthTicket {
+  tokenHash String   @id
+  kind      String
+  userId    String?
+  did       String
+  handle    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to a PR makes the first run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+
+    env:
+      # `prisma generate` resolves the datasource env var even though it never
+      # opens a connection. Nothing in these checks touches a database, so the
+      # value only has to parse as a SQLite URL.
+      DATABASE_URL: file:./ci.db
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # No version here on purpose: the `packageManager` field in package.json
+      # is the one place the pnpm version is pinned.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # postinstall runs `lex build`, which generates the Lexicon schemas the
+      # server imports, and `nuxt prepare`, which writes the .nuxt/tsconfig.json
+      # that typecheck reads; Prisma's install hook generates the client the
+      # server types resolve against.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # The lexicons under `lexicons/` are vendored, and everything the server
+      # validates against is generated from them, so a hand-edited one would
+      # silently change what we accept off the wire. This re-derives the CIDs
+      # from the files on disk and fails if they no longer match the manifest.
+      # It resolves against the pinned CIDs and makes no network calls, so it
+      # cannot go red because an upstream author published a new version —
+      # that only happens on a deliberate `lex install --update`.
+      - name: Verify lexicons
+        if: ${{ !cancelled() }}
+        run: pnpm exec lex install --ci
+
+      # Every check runs even after an earlier one fails, so a red build reports
+      # everything that is wrong in one pass instead of one thing per push.
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: pnpm lint
+
+      - name: Format
+        if: ${{ !cancelled() }}
+        run: pnpm format:check
+
+      - name: Typecheck
+        if: ${{ !cancelled() }}
+        run: pnpm typecheck
+
+      - name: Test
+        if: ${{ !cancelled() }}
+        run: pnpm test
+
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-latest
+
+    env:
+      # Only used while `pnpm install`'s postinstall generates the Prisma
+      # client, same as the `checks` job above. The actual test run points at
+      # its own file — see `e2e/env.ts` — regardless of this value.
+      DATABASE_URL: file:./ci.db
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright's Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E
+        run: pnpm test:e2e

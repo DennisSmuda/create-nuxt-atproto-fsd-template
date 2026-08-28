@@ -1,0 +1,69 @@
+# {{title}}
+
+Nuxt 4, Prisma on SQLite, `@sidebase/nuxt-auth` with credentials and
+AT Protocol (Bluesky) sign-in.
+
+## Setup
+
+Node 24 and pnpm (pinned by `packageManager` — `corepack enable` picks up the
+right version).
+
+```bash
+pnpm install
+cp .env.example .env       # then fill it in, see below
+pnpm prisma migrate dev    # creates dev.db and applies migrations
+```
+
+### Environment
+
+| Variable                    | Required          | What it is                                                                                               |
+| --------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`              | yes               | SQLite file, e.g. `file:./dev.db`. In production, an absolute path _outside_ the repo.                   |
+| `NUXT_AUTH_SECRET`          | yes               | Signs session tokens. `openssl rand -hex 32`.                                                            |
+| `NUXT_AUTH_ORIGIN`          | yes               | Absolute URL of the auth endpoint, e.g. `http://127.0.0.1:3000/api/auth`. Must match the browsed origin. |
+| `APP_ORIGIN`                | yes in production | Origin the AT Protocol OAuth client metadata is built from. Defaults to `http://127.0.0.1:3000`.         |
+| `NUXT_PUBLIC_PASSWORD_AUTH` | no                | `true` re-enables email + password sign-in. On in `nuxt dev`, off in production builds.                  |
+| `SIGNUP_ALLOWLIST`          | no                | Comma-separated handles/emails allowed to sign up. Unset means anyone can.                               |
+
+## Sign in via Atmosphere Protocol
+
+AT Protocol OAuth, server-side, `atproto` scope only — no email, no account
+access. Email/password sign-in exists as a dev-only affordance
+(`server/utils/password-auth.ts`), off in production unless
+`NUXT_PUBLIC_PASSWORD_AUTH=true`.
+
+**In dev, browse to `http://127.0.0.1:3000`, not `localhost:3000`** — the
+atproto dev exception needs matching loopback origins, or the session
+cookie won't stick.
+
+Full design rationale: [`docs/atproto.md`](docs/atproto.md).
+
+## Development
+
+```bash
+pnpm dev                   # http://127.0.0.1:3000
+```
+
+## Checks
+
+```bash
+pnpm lint                  # oxlint
+pnpm format:check          # oxfmt --check   (pnpm format writes)
+pnpm typecheck             # nuxt typecheck across all project references
+pnpm test                  # vitest run      (pnpm test:watch)
+pnpm test:e2e              # playwright test
+```
+
+## Architecture
+
+Feature-Sliced Design — see [`docs/architecture.md`](docs/architecture.md).
+The `user` slice (auth, AT Protocol sign-in) is a worked example through
+every layer; `entities/`, `features/` and `widgets/` are otherwise empty,
+ready for your own domain.
+
+## Production
+
+```bash
+pnpm build
+pnpm preview               # preview the production build locally
+```

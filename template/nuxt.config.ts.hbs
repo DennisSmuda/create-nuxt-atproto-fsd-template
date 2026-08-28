@@ -1,0 +1,63 @@
+export default defineNuxtConfig({
+  compatibilityDate: '2025-07-15',
+  devtools: { enabled: true },
+
+  app: {
+    head: {
+      meta: [{ name: 'apple-mobile-web-app-title', content: '{{title}}' }],
+    },
+  },
+
+  // Pinned to IPv4 loopback rather than `localhost`, which on macOS resolves to
+  // `::1` alone. It also settles which loopback address AT Protocol sign-in
+  // uses: the spec accepts `127.0.0.1` or `[::1]` as the redirect, and it has to
+  // be the one the browser is on or the session cookie is set for an origin
+  // nothing reads it back from.
+  devServer: {
+    host: '127.0.0.1',
+    port: 3000,
+  },
+  modules: ['@sidebase/nuxt-auth', '@nuxt/ui', '@nuxtjs/i18n'],
+  i18n: {
+    strategy: 'no_prefix',
+    defaultLocale: 'en',
+    locales: [{ code: 'en', name: 'English', file: 'en.ts' }],
+  },
+  auth: {
+    originEnvKey: 'NUXT_AUTH_ORIGIN',
+    provider: {
+      type: 'authjs',
+    },
+  },
+  runtimeConfig: {
+    authSecret: process.env.NUXT_AUTH_SECRET,
+    public: {
+      // Email + password sign-in is a development affordance, so it is on in
+      // `nuxt dev` and off in a production build unless a deployment sets
+      // `NUXT_PUBLIC_PASSWORD_AUTH=true`. Public so the login page and the
+      // provider that guards it read one value and cannot disagree.
+      passwordAuth: process.env.NODE_ENV !== 'production',
+    },
+  },
+  icon: {
+    serverBundle: {
+      collections: ['lucide'],
+    },
+  },
+  css: ['~/assets/css/main.css'],
+
+  nitro: {
+    // @atproto-labs/fetch-node depends on npm-aliased packages (undici_v6/v7/v8).
+    // Nitro's node_modules tracer/copy step drops the alias and collides
+    // multiple undici versions under one name, so a pruned `.output` boots
+    // with "Cannot find package 'undici_v6'". Disabling tracing resolves every
+    // external import through the full node_modules directly instead, the
+    // same way it already resolves in `nuxt dev`.
+    externals: {
+      trace: false,
+    },
+  },
+
+  // No component auto-import: better FSD analysis
+  components: false,
+})

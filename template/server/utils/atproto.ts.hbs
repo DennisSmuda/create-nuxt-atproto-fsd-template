@@ -1,0 +1,324 @@
+import { randomBytes, timingSafeEqual } from 'crypto'
+import { isAtIdentifierString, isHandleString, xrpc } from '@atproto/lex'
+import {
+  NodeOAuthClient,
+  type NodeSavedSession,
+  type NodeSavedSessionStore,
+  type NodeSavedState,
+  type NodeSavedStateStore,
+} from '@atproto/oauth-client-node'
+import type { H3Event } from 'h3'
+import * as app from '../lexicons/app'
+import * as com from '../lexicons/com'
+import prisma from './prisma'
+
+/**
+ * AT Protocol OAuth client and storage — infrastructure only.
+ * `server/domain/user/atproto.ts` handles what an account means.
+ *
+ * Runs server-side, not in the browser: every API route authorizes through a
+ * next-auth session, so the DID must come back proven by the auth server
+ * itself rather than asserted by client-side code.
+ */
+
+/** Base scope — identity only, no repo or email access. */
+const SCOPE = 'atproto'
+
+const REDIRECT_PATH = '/api/atproto/callback'
+
+function appOrigin(): string {
+  return (process.env.APP_ORIGIN || 'http://127.0.0.1:3000').replace(/\/+$/, '')
+}
+
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '::1'])
+
+const isLocal = () => LOCAL_HOSTNAMES.has(new URL(appOrigin()).hostname)
+
+/**
+ * Refuses to boot in production on a loopback/unset `APP_ORIGIN`.
+ * An unset origin breaks sign-in visibly, but silently drops `Secure` from
+ * the flow cookie — asserted at boot so that never ships.
+ */
+export function assertProductionOrigin(): void {
+  if (process.env.NODE_ENV !== 'production') return
+
+  if (!process.env.APP_ORIGIN) {
+    throw new Error(
+      'APP_ORIGIN must be set in production: it is the origin AT Protocol ' +
+        'sign-in redirects to, and without it the flow cookie loses `Secure`.',
+    )
+  }
+
+  if (isLocal()) {
+    throw new Error(
+      `APP_ORIGIN is a loopback address (${appOrigin()}) but NODE_ENV is ` +
+        'production. That selects the development client-id exception and ' +
+        'sends the flow cookie without `Secure`.',
+    )
+  }
+
+  const origin = new URL(appOrigin())
+
+  if (origin.protocol !== 'https:') {
+    throw new Error(
+      `APP_ORIGIN (${appOrigin()}) must be https in production — the AT ` +
+        'Protocol client-id spec rejects anything else.',
+    )
+  }
+
+  if (isIpHostname(origin.hostname)) {
+    throw new Error(
+      `APP_ORIGIN (${appOrigin()}) is a bare IP address, but the AT Protocol ` +
+        'client-id spec requires a real hostname. Point it at the domain, ' +
+        'not the server IP.',
+    )
+  }
+}
+
+/** Covers IPv4 and bracketed/bare IPv6 — the client-id spec rejects both as a hostname. */
+function isIpHostname(hostname: string): boolean {
+  const bare = hostname.replace(/^\[|\]$/g, '')
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(bare) || bare.includes(':')
+}
+
+/**
+ * The client's public identity, as an authorization server reads it.
+ *
+ * Production: `client_id` is an https URL that serves this document
+ * (`server/routes/client-metadata.json.get.ts` returns the same object).
+ * Development: no public URL, so we use the spec's localhost exception —
+ * client_id origin `http://localhost`, redirect URI in the query string.
+ * The redirect itself must be a loopback IP, never the name `localhost`.
+ */
+export function clientMetadata() {
+  const origin = appOrigin()
+  const redirectUri = `${origin}${REDIRECT_PATH}`
+
+  if (isLocal()) {
+    // APP_ORIGIN picks the IP family (v4/v6 aren't interchangeable);
+    // a bare `localhost` names neither, so it falls back to IPv4.
+    const local = new URL(redirectUri)
+    if (local.hostname === 'localhost') {
+      local.hostname = '127.0.0.1'
+    }
+
+    const query = new URLSearchParams({ redirect_uri: local.toString(), scope: SCOPE })
+    return {
+      ...baseMetadata(local.toString()),
+      client_id: `http://localhost?${query.toString()}`,
+    }
+  }
+
+  return {
+    ...baseMetadata(redirectUri),
+    client_id: `${origin}/client-metadata.json`,
+    client_uri: origin,
+  }
+}
+
+function baseMetadata(redirectUri: string) {
+  return {
+    client_name: '{{title}}',
+    redirect_uris: [redirectUri] as [string],
+    scope: SCOPE,
+    grant_types: ['authorization_code', 'refresh_token'] as [
+      'authorization_code',
+      'refresh_token',
+    ],
+    response_types: ['code'] as ['code'],
+    application_type: 'web' as const,
+    // Public client: no keys to serve/rotate. Session is revoked at the end
+    // of the callback anyway, so shorter-lived tokens cost nothing.
+    token_endpoint_auth_method: 'none' as const,
+    dpop_bound_access_tokens: true as const,
+  }
+}
+
+/**
+ * Ties a callback to the browser that started the sign-in.
+ *
+ * The library's `state` check alone is replayable — it's checked against a
+ * store shared by every user, so any valid `state` works for anyone who has
+ * it. This nonce, minted here and compared on the way back, is what actually
+ * binds the callback to this browser.
+ *
+ * `Lax`, not `Strict`: the callback is a top-level cross-site navigation from
+ * the PDS, which `Strict` would drop the cookie for.
+ */
+const FLOW_COOKIE = 'atproto_flow'
+
+/** Long enough to read a consent screen, short enough not to stay resumable. */
+const FLOW_MAX_AGE_S = 10 * 60
+
+/** One cookie per browser — a second sign-in abandons the first rather than stacking state. */
+export function beginFlow(event: H3Event): string {
+  const nonce = randomBytes(32).toString('base64url')
+
+  setCookie(event, FLOW_COOKIE, nonce, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: !isLocal(),
+    path: '/',
+    maxAge: FLOW_MAX_AGE_S,
+  })
+
+  return nonce
+}
+
+/**
+ * Reads the nonce and clears the cookie immediately — a nonce is good for one
+ * attempt, even if something later in the callback fails.
+ */
+export function consumeFlow(event: H3Event): string | undefined {
+  const nonce = getCookie(event, FLOW_COOKIE)
+  deleteCookie(event, FLOW_COOKIE, { path: '/' })
+  return nonce
+}
+
+/** Length-guarded first, since `timingSafeEqual` throws rather than answering. */
+export function flowMatches(state: string | null, expected: string | undefined): boolean {
+  if (!state || !expected) return false
+
+  const a = Buffer.from(state)
+  const b = Buffer.from(expected)
+
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+/** In-flight authorization requests: written on the way out, read on the way back. */
+const stateStore: NodeSavedStateStore = {
+  async set(key: string, state: NodeSavedState) {
+    const value = JSON.stringify(state)
+    await prisma.atprotoOauthState.upsert({
+      where: { key },
+      create: { key, state: value },
+      update: { state: value },
+    })
+  },
+  async get(key: string) {
+    const row = await prisma.atprotoOauthState.findUnique({ where: { key } })
+    return row ? (JSON.parse(row.state) as NodeSavedState) : undefined
+  },
+  async del(key: string) {
+    await prisma.atprotoOauthState.deleteMany({ where: { key } })
+  },
+}
+
+/**
+ * Issued OAuth sessions. The library requires somewhere to put them; this app
+ * revokes at the end of the callback, so a row here lives milliseconds.
+ */
+const sessionStore: NodeSavedSessionStore = {
+  async set(did: string, session: NodeSavedSession) {
+    const value = JSON.stringify(session)
+    await prisma.atprotoOauthSession.upsert({
+      where: { did },
+      create: { did, session: value },
+      update: { session: value },
+    })
+  },
+  async get(did: string) {
+    const row = await prisma.atprotoOauthSession.findUnique({ where: { did } })
+    return row ? (JSON.parse(row.session) as NodeSavedSession) : undefined
+  },
+  async del(did: string) {
+    await prisma.atprotoOauthSession.deleteMany({ where: { did } })
+  },
+}
+
+/** An hour — far longer than a real PDS round-trip, so a sweep only ever finds abandoned rows. */
+const STATE_MAX_AGE_MS = 60 * 60 * 1000
+
+/** The library deletes state on the way back through, leaving the flows nobody finished. */
+export async function purgeExpiredOauthState(): Promise<void> {
+  await prisma.atprotoOauthState.deleteMany({
+    where: { createdAt: { lt: new Date(Date.now() - STATE_MAX_AGE_MS) } },
+  })
+}
+
+/**
+ * A row survives only if reading it threw before the library's `finally`
+ * could delete it — rare, but it holds a refresh token, so it must be swept.
+ */
+export async function purgeStaleOauthSessions(): Promise<void> {
+  await prisma.atprotoOauthSession.deleteMany({
+    where: { updatedAt: { lt: new Date(Date.now() - STATE_MAX_AGE_MS) } },
+  })
+}
+
+/**
+ * Bluesky's public profile API — not the user's own PDS/OAuth session.
+ * Profiles are public, so this works for any DID, not just the signed-in one.
+ */
+const PUBLIC_APPVIEW = 'https://public.api.bsky.app'
+
+export interface AtprotoProfile {
+  displayName: string | null
+  avatarUrl: string | null
+}
+
+/** Never throws — sign-in must not fail over a profile lookup. Null covers not-set, missing, and unreachable alike. */
+export async function fetchProfile(did: string): Promise<AtprotoProfile> {
+  if (!isAtIdentifierString(did)) return { displayName: null, avatarUrl: null }
+
+  try {
+    const { body } = await xrpc(PUBLIC_APPVIEW, app.bsky.actor.getProfile, {
+      params: { actor: did },
+    })
+    return {
+      displayName: body.displayName?.trim() || null,
+      avatarUrl: httpsUrl(body.avatar),
+    }
+  } catch {
+    return { displayName: null, avatarUrl: null }
+  }
+}
+
+/**
+ * Avatars are rendered as `<img src>` on other people's screens, so only an
+ * absolute https URL is stored — never whatever scheme an AppView answered with.
+ */
+function httpsUrl(value: string | undefined): string | null {
+  if (!value) return null
+
+  try {
+    return new URL(value).protocol === 'https:' ? value : null
+  } catch {
+    return null
+  }
+}
+
+export async function fetchAvatarUrl(did: string): Promise<string | null> {
+  return (await fetchProfile(did)).avatarUrl
+}
+
+/**
+ * The DID behind a handle, or null.
+ *
+ * A handle is a rented name — it can be reassigned — so callers must match on
+ * the DID, never cache the handle as identity.
+ */
+export async function resolveHandleToDid(handle: string): Promise<string | null> {
+  if (!isHandleString(handle)) return null
+
+  try {
+    const { body } = await xrpc(PUBLIC_APPVIEW, com.atproto.identity.resolveHandle, {
+      params: { handle },
+    })
+    return body.did
+  } catch {
+    return null
+  }
+}
+
+/** Lazy singleton — building it reads `APP_ORIGIN`, which may not be set yet at module-eval time. */
+let client: NodeOAuthClient | undefined
+
+export function atprotoClient(): NodeOAuthClient {
+  client ??= new NodeOAuthClient({
+    clientMetadata: clientMetadata(),
+    stateStore,
+    sessionStore,
+  })
+  return client
+}
