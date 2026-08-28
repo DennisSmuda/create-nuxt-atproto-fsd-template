@@ -12,20 +12,31 @@ A [Bingo](https://create.bingo) template — the same engine `vp create`
 
 ## Usage
 
-No npm publish needed — run it straight from this repo:
+No npm publish needed — npx can run a package straight off its GitHub repo,
+which uses this repo's own `bin` (`index.js`) to run `template.js` through
+Bingo:
 
 ```bash
-npx bingo github:DennisSmuda/create-nuxt-atproto-fsd-template --directory my-new-app
+npx --allow-git=all github:DennisSmuda/create-nuxt-atproto-fsd-template --offline --directory my-new-app
 ```
+
+`--allow-git=all` is required on npm v12+, which disables git-based installs
+(`github:`, `git+https:`) by default. `--offline` scaffolds the directory
+locally only — drop it if you do want a GitHub repo created and pushed.
 
 You'll be prompted for:
 
-- `owner` — GitHub owner/org (used for the repo, not required to actually push)
+- `owner` — GitHub owner/org (only used for local package metadata when
+  `--offline`)
 - `repository` — repo/package name
 - `title` — display name (defaults to `repository`)
 
-Note: `vp create <url>` won't work here — it uses degit to raw-copy the repo
-instead of running `template.js` through Bingo.
+Two commands look similar but don't work here:
+
+- `npx bingo github:...` — bingo's own CLI only accepts a local template
+  file path, not a remote spec.
+- `vp create https://github.com/...` — uses degit to raw-copy the repo
+  instead of running `template.js` through Bingo.
 
 ## Developing this template
 
