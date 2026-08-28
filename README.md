@@ -12,11 +12,20 @@ A [Bingo](https://create.bingo) template — the same engine `vp create`
 
 ## Usage
 
-Run this command to get started with your new app:
+No npm publish needed — run it straight from this repo:
 
 ```bash
-vp create https://github.com/DennisSmuda/create-nuxt-atproto-fsd-template
+npx bingo github:DennisSmuda/create-nuxt-atproto-fsd-template --directory my-new-app
 ```
+
+You'll be prompted for:
+
+- `owner` — GitHub owner/org (used for the repo, not required to actually push)
+- `repository` — repo/package name
+- `title` — display name (defaults to `repository`)
+
+Note: `vp create <url>` won't work here — it uses degit to raw-copy the repo
+instead of running `template.js` through Bingo.
 
 ## Developing this template
 
